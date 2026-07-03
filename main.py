@@ -3,7 +3,8 @@ import os
 import random
 import re
 import threading
-from datetime import datetime, timedelta
+import time
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
@@ -26,9 +27,6 @@ HASHTAGS = [
     "#Мастерская_47",
     "#внесезонов"
 ]
-
-# --- ГЛОБАЛЬНЫЙ ОБЪЕКТ ДЛЯ ТАЙМЕРОВ ---
-active_timers = {}
 
 # --- БАЗЫ ДАННЫХ ---
 def init_db():
@@ -65,6 +63,7 @@ def save_quiz(question, options, correct_answer, correct_option_id, hashtag=None
     ''', (question, options, correct_answer, correct_option_id, hashtag, datetime.now().isoformat()))
     conn.commit()
     conn.close()
+    print(f"✅ Викторина сохранена: {question[:30]}...")
 
 def get_all_quizzes():
     conn = sqlite3.connect(QUIZZES_DB)
@@ -119,7 +118,7 @@ def parse_quiz(text):
         "correct_option_id": correct_option_id
     }
 
-# --- ПАРСИНГ ДАТЫ И ВРЕМЕНИ ---
+# --- ПАРСИНГ ДАТЫ ---
 def parse_datetime(text):
     patterns = [
         r'(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})',
@@ -169,41 +168,41 @@ def parse_datetime(text):
     
     return None
 
-# --- ФУНКЦИЯ ДЛЯ ПУБЛИКАЦИИ ПО ТАЙМЕРУ ---
-def publish_quiz_delayed(bot, chat_id, file_id, quiz_data, hashtag):
-    """Запускается по таймеру и публикует викторину"""
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    
+# --- ФУНКЦИЯ ДЛЯ ТАЙМЕРА (ПРОСТОЙ ВАРИАНТ) ---
+def publish_quiz_task(bot_token, chat_id, file_id, quiz_data, hashtag):
+    """Запускается в отдельном потоке и публикует викторину"""
     try:
+        # Создаём отдельный экземпляр бота для потока
+        from telegram import Bot
+        bot = Bot(token=bot_token)
+        
         caption = (
-            f"Викторина\n{hashtag}\n\n"
+            f"🎯 ВИКТОРИНА\n{hashtag}\n\n"
             f'<a href="{SUGGESTION_LINK}">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>'
         )
         
-        loop.run_until_complete(bot.send_photo(
+        # Отправляем фото
+        bot.send_photo(
             chat_id=chat_id,
             photo=file_id,
             caption=caption,
             parse_mode="HTML"
-        ))
+        )
         
-        loop.run_until_complete(bot.send_poll(
+        # Отправляем опрос
+        bot.send_poll(
             chat_id=chat_id,
             question=quiz_data['question'],
             options=quiz_data['options'],
             type="quiz",
             correct_option_id=quiz_data['correct_option_id'],
             is_anonymous=True
-        ))
+        )
         
         print(f"✅ Викторина опубликована в {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         
     except Exception as e:
         print(f"❌ Ошибка публикации: {e}")
-    finally:
-        loop.close()
 
 # --- ОБРАБОТЧИКИ ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -265,7 +264,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
             quiz_data = context.user_data.get('quiz_data')
             hashtag = context.user_data.get('quiz_hashtag')
-            file_id = context.user_data.get('file_id')
             
             keyboard = [
                 [InlineKeyboardButton("✅ Запланировать", callback_data="confirm_publish")],
@@ -345,25 +343,33 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             hashtag
         )
         
-        # Создаём таймер
+        # Вычисляем задержку
         delay = (publish_time - datetime.now()).total_seconds()
         
-        timer = threading.Timer(
-            delay,
-            publish_quiz_delayed,
-            args=[context.bot, CHANNEL_ID, file_id, quiz_data, hashtag]
+        # Создаём и запускаем поток с таймером
+        thread = threading.Thread(
+            target=publish_quiz_task,
+            args=[BOT_TOKEN, CHANNEL_ID, file_id, quiz_data, hashtag]
         )
-        timer.daemon = True
-        timer.start()
-        
-        # Сохраняем таймер в глобальный словарь (чтобы не потерять)
-        timer_id = f"{update.effective_user.id}_{datetime.now().timestamp()}"
-        active_timers[timer_id] = timer
+        thread.daemon = True
+        thread.start()
         
         await query.edit_message_text(
             f"✅ Викторина запланирована на **{publish_time.strftime('%d.%m.%Y в %H:%M')}** МСК!\n\n"
+            f"⏳ Осталось: {int(delay)} секунд\n\n"
             "В указанное время она автоматически появится в канале. 🚀"
         )
+        
+        # Запускаем отдельный поток, который подождёт и опубликует
+        def delayed_publish():
+            # Ждём нужное время
+            time.sleep(delay)
+            # Публикуем
+            publish_quiz_task(BOT_TOKEN, CHANNEL_ID, file_id, quiz_data, hashtag)
+        
+        timer_thread = threading.Thread(target=delayed_publish)
+        timer_thread.daemon = True
+        timer_thread.start()
         
         context.user_data.clear()
     
@@ -461,6 +467,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_callback))
     
     print("🤖 Бот запущен!")
+    print(f"📅 Текущее время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     app.run_polling()
 
 if __name__ == "__main__":
