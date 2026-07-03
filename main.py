@@ -521,12 +521,18 @@ async def all_quizzes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply)
 
 # --- ЗАПУСК ---
+# --- ЗАПУСК ---
 def main():
     init_db()
     init_quizzes_db()
     
+    # Создаём приложение и сразу инициализируем JobQueue
     app = Application.builder().token(BOT_TOKEN).build()
     
+    # Добавляем JobQueue через билдер
+    job_queue = app.job_queue
+    
+    # Регистрируем все обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("quiz", start_quiz))
     app.add_handler(CommandHandler("random", random_quiz))
