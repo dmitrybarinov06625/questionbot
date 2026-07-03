@@ -7,6 +7,7 @@ import asyncio
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, JobQueue
 
 # --- КОНФИГ ---
 BOT_TOKEN = "8798378718:AAEmRvVmnWBKCDu_sHQY8bvVhclnMwUmnFM"
@@ -526,13 +527,14 @@ def main():
     init_db()
     init_quizzes_db()
     
-    # Создаём приложение и сразу инициализируем JobQueue
     app = Application.builder().token(BOT_TOKEN).build()
     
-    # Добавляем JobQueue через билдер
-    job_queue = app.job_queue
+    # Инициализируем JobQueue вручную
+    from telegram.ext import JobQueue
+    app.job_queue = JobQueue()
+    app.job_queue.set_application(app)
+    app.job_queue.start()
     
-    # Регистрируем все обработчики
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("quiz", start_quiz))
     app.add_handler(CommandHandler("random", random_quiz))
@@ -547,6 +549,3 @@ def main():
     
     print("🤖 Бот запущен!")
     app.run_polling()
-
-if __name__ == "__main__":
-    main()
