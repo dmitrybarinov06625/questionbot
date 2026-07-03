@@ -7,14 +7,12 @@ from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 
-# --- ГЛОБАЛЬНЫЙ СПИСОК ДЛЯ ОТЛОЖЕННЫХ ПУБЛИКАЦИЙ ---
-
 # --- КОНФИГИ ---
 BOT_TOKEN = "8798378718:AAEmRvVmnWBKCDu_sHQY8bvVhclnMwUmnFM"
 DB_NAME = 'posts.db'
 QUIZZES_DB = 'quizzes.db'
-CHANNEL_ID = "@tryaslos"  # ЗАМЕНИ НА СВОЙ КАНАЛ
-SUGGESTION_LINK = "https://t.me/trassa993?direct"  # ЗАМЕНИ НА СВОЮ ССЫЛКУ
+CHANNEL_ID = "@tryaslos"  # ЗАМЕНИ
+SUGGESTION_LINK = "https://t.me/trassa993?direct"  # ЗАМЕНИ
 
 HASHTAGS = [
     "#Новое_поколение",
@@ -29,8 +27,6 @@ HASHTAGS = [
     "#внесезонов"
 ]
 
-scheduled_quizzes = []
-
 # --- БАЗЫ ДАННЫХ ---
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -42,6 +38,8 @@ def init_db():
 def init_quizzes_db():
     conn = sqlite3.connect(QUIZZES_DB)
     c = conn.cursor()
+    
+    # Таблица викторин
     c.execute('''
         CREATE TABLE IF NOT EXISTS quizzes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +51,20 @@ def init_quizzes_db():
             date TEXT
         )
     ''')
+    
+    # Таблица расписания
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS scheduled (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question TEXT,
+            options TEXT,
+            correct_option_id INTEGER,
+            hashtag TEXT,
+            file_id TEXT,
+            publish_time TEXT
+        )
+    ''')
+    
     conn.commit()
     conn.close()
     print("✅ Базы данных готовы")
@@ -66,7 +78,6 @@ def save_quiz(question, options, correct_answer, correct_option_id, hashtag=None
     ''', (question, options, correct_answer, correct_option_id, hashtag, datetime.now().isoformat()))
     conn.commit()
     conn.close()
-    print(f"✅ Викторина сохранена: {question[:30]}...")
 
 def get_all_quizzes():
     conn = sqlite3.connect(QUIZZES_DB)
@@ -83,6 +94,37 @@ def get_random_quiz():
     row = c.fetchone()
     conn.close()
     return row
+
+# --- ФУНКЦИИ РАСПИСАНИЯ ---
+def add_scheduled(question, options, correct_option_id, hashtag, file_id, publish_time):
+    conn = sqlite3.connect(QUIZZES_DB)
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO scheduled (question, options, correct_option_id, hashtag, file_id, publish_time)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (question, options, correct_option_id, hashtag, file_id, publish_time.isoformat()))
+    conn.commit()
+    conn.close()
+
+def get_due_quizzes():
+    """Возвращает викторины, которые пора публиковать"""
+    conn = sqlite3.connect(QUIZZES_DB)
+    c = conn.cursor()
+    now = datetime.now().isoformat()
+    c.execute('''
+        SELECT id, question, options, correct_option_id, hashtag, file_id, publish_time
+        FROM scheduled WHERE publish_time <= ?
+    ''', (now,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def delete_scheduled(quiz_id):
+    conn = sqlite3.connect(QUIZZES_DB)
+    c = conn.cursor()
+    c.execute('DELETE FROM scheduled WHERE id = ?', (quiz_id,))
+    conn.commit()
+    conn.close()
 
 def backup_quizzes():
     if os.path.exists(QUIZZES_DB):
@@ -161,7 +203,6 @@ def parse_datetime(text):
                 dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
                 if dt < now:
                     dt = dt + timedelta(days=1)
-                # ВЫЧИТАЕМ 3 ЧАСА (поправка на UTC)
                 dt = dt - timedelta(hours=3)
                 return dt
             
@@ -209,36 +250,40 @@ def parse_datetime(text):
     
     return None
 
-# --- ФУНКЦИЯ ДЛЯ ПРОВЕРКИ ЗАПЛАНИРОВАННЫХ ---
-async def check_scheduled_quizzes(context: ContextTypes.DEFAULT_TYPE):
-    """Проверяет каждую минуту, не пора ли опубликовать"""
-    now = datetime.now()
-    to_publish = []
+# --- ПРОВЕРКА РАСПИСАНИЯ ---
+async def check_and_publish_due(context: ContextTypes.DEFAULT_TYPE):
+    """Проверяет и публикует викторины, у которых наступило время"""
+    due = get_due_quizzes()
     
-    for job in scheduled_quizzes:
-        if job['publish_time'] <= now:
-            to_publish.append(job)
-    
-    for job in to_publish:
-        scheduled_quizzes.remove(job)
-    
-    for job in to_publish:
+    for row in due:
+        quiz_id, question, options, correct_option_id, hashtag, file_id, publish_time_str = row
+        options_list = options.split(", ") if options else []
+        
         try:
+            caption = (
+                f"🎯 ВИКТОРИНА\n{hashtag}\n\n"
+                f'<a href="{SUGGESTION_LINK}">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>'
+            )
+            
             await context.bot.send_photo(
-                chat_id=job['chat_id'],
-                photo=job['file_id'],
-                caption=job['caption'],
+                chat_id=CHANNEL_ID,
+                photo=file_id,
+                caption=caption,
                 parse_mode="HTML"
             )
+            
             await context.bot.send_poll(
-                chat_id=job['chat_id'],
-                question=job['quiz_data']['question'],
-                options=job['quiz_data']['options'],
+                chat_id=CHANNEL_ID,
+                question=question,
+                options=options_list,
                 type="quiz",
-                correct_option_id=job['quiz_data']['correct_option_id'],
+                correct_option_id=correct_option_id,
                 is_anonymous=True
             )
-            print(f"✅ Викторина опубликована: {job['quiz_data']['question'][:30]}...")
+            
+            delete_scheduled(quiz_id)
+            print(f"✅ Викторина опубликована: {question[:30]}...")
+            
         except Exception as e:
             print(f"❌ Ошибка публикации: {e}")
 
@@ -265,6 +310,9 @@ async def start_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Проверяем расписание при каждом сообщении
+    await check_and_publish_due(context)
+    
     text = update.message.text
     if not text:
         await update.message.reply_text("❌ Отправь текст")
@@ -375,6 +423,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return
         
+        # Сохраняем викторину в основную базу
         save_quiz(
             quiz_data['question'],
             ", ".join(quiz_data['options']),
@@ -383,19 +432,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             hashtag
         )
         
-        caption = (
-            f"🎯 ВИКТОРИНА\n{hashtag}\n\n"
-            f'<a href="{SUGGESTION_LINK}">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>'
+        # Сохраняем в расписание
+        add_scheduled(
+            quiz_data['question'],
+            ", ".join(quiz_data['options']),
+            quiz_data['correct_option_id'],
+            hashtag,
+            file_id,
+            publish_time
         )
-        
-        scheduled_quizzes.append({
-            'chat_id': CHANNEL_ID,
-            'file_id': file_id,
-            'quiz_data': quiz_data,
-            'hashtag': hashtag,
-            'caption': caption,
-            'publish_time': publish_time
-        })
         
         delay = int((publish_time - datetime.now()).total_seconds())
         
@@ -519,37 +564,4 @@ async def all_quizzes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     quizzes = get_all_quizzes()
     if not quizzes:
         await update.message.reply_text("📭 В базе пока нет викторин")
-        return
-    
-    reply = "📚 **Все викторины:**\n\n"
-    for i, (id_, question, options, correct, hashtag) in enumerate(quizzes[:10], 1):
-        reply += f"{i}. {question[:50]}...\n"
-        if hashtag:
-            reply += f"   🏷️ {hashtag}\n"
-    
-    await update.message.reply_text(reply)
-
-# --- ЗАПУСК ---
-def main():
-    init_db()
-    init_quizzes_db()
-    
-    app = Application.builder().token(BOT_TOKEN).build()
-    
-    # Запускаем проверку запланированных каждую минуту
-    job_queue = app.job_queue
-    job_queue.run_repeating(check_scheduled_quizzes, interval=60, first=10)
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("quiz", start_quiz))
-    app.add_handler(CommandHandler("random", random_quiz))
-    app.add_handler(CommandHandler("all", all_quizzes))
-    app.add_handler(CommandHandler("backup_quizzes", backup_quizzes_command))
-    app.add_handler(CommandHandler("restore_quizzes", restore_quizzes_command))
-    
-    app.add_handler(MessageHandler(filters.PHOTO, handle_image))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^#'), handle_custom_hashtag))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(CallbackQueryHandler(button_callback))
-    
-  
+        r     
