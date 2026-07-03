@@ -120,7 +120,7 @@ def parse_quiz(text):
 
 # --- ПАРСИНГ ДАТЫ ---
 def parse_datetime(text):
-    """Парсит время с учётом МСК (UTC+3)"""
+    """Парсит время и вычитает 3 часа (поправка на UTC)"""
     from datetime import timedelta
     
     patterns = [
@@ -138,13 +138,14 @@ def parse_datetime(text):
         if match:
             groups = match.groups()
             
-            # Только время (20:33) -> сегодня в это время
+            # Только время (20:33)
             if len(groups) == 2 and all(g.isdigit() for g in groups):
                 hour, minute = int(groups[0]), int(groups[1])
                 dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                # Если уже прошло сегодня — значит завтра
                 if dt < now:
                     dt = dt + timedelta(days=1)
+                # ВЫЧИТАЕМ 3 ЧАСА (поправка на UTC)
+                dt = dt - timedelta(hours=3)
                 return dt
             
             elif len(groups) == 3:  # 2026-07-03 20:33
@@ -152,6 +153,7 @@ def parse_datetime(text):
                 try:
                     dt = datetime.strptime(date_str, '%Y-%m-%d')
                     dt = dt.replace(hour=int(hour), minute=int(minute))
+                    dt = dt - timedelta(hours=3)
                     return dt
                 except:
                     continue
@@ -160,6 +162,7 @@ def parse_datetime(text):
                 day, month, year, hour, minute = groups
                 try:
                     dt = datetime(int(year), int(month), int(day), int(hour), int(minute))
+                    dt = dt - timedelta(hours=3)
                     return dt
                 except:
                     continue
@@ -171,17 +174,20 @@ def parse_datetime(text):
                         hour, minute = int(groups[2]), int(groups[3])
                         day, month = int(day_month[0]), int(day_month[1])
                         dt = datetime(now.year, month, day, hour, minute)
+                        dt = dt - timedelta(hours=3)
                         return dt
                     elif '.' in groups[2]:
                         day_month = groups[2].split('.')
                         hour, minute = int(groups[0]), int(groups[1])
                         day, month = int(day_month[0]), int(day_month[1])
                         dt = datetime(now.year, month, day, hour, minute)
+                        dt = dt - timedelta(hours=3)
                         return dt
                 else:
                     hour, minute = int(groups[0]), int(groups[1])
                     day, month = int(groups[2]), int(groups[3])
                     dt = datetime(now.year, month, day, hour, minute)
+                    dt = dt - timedelta(hours=3)
                     return dt
     
     return None
