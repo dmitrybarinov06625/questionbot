@@ -1,4 +1,3 @@
-import re
 import sqlite3
 import json
 from datetime import datetime
@@ -7,7 +6,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # --- КОНФИГ ---
 BOT_TOKEN = "8798378718:AAEmRvVmnWBKCDu_sHQY8bvVhclnMwUmnFM"
-DB_NAME = 'quiz_data.db'
+DB_NAME = 'posts.db'  # новая база
 
 # --- БАЗА ДАННЫХ ---
 def init_db():
@@ -17,148 +16,133 @@ def init_db():
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             text TEXT,
-            questions TEXT,
-            hashtags TEXT,
+            source TEXT,
             date TIMESTAMP
         )
     ''')
+    # Создаём индекс для быстрого поиска
+    c.execute('CREATE INDEX IF NOT EXISTS idx_text ON posts(text)')
     conn.commit()
     conn.close()
 
-def save_to_db(text, questions, hashtags=None):
+def save_post(text, source=None):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute('''
-        INSERT INTO posts (text, questions, hashtags, date)
-        VALUES (?, ?, ?, ?)
-    ''', (
-        text,
-        json.dumps(questions, ensure_ascii=False),
-        json.dumps(hashtags, ensure_ascii=False) if hashtags else None,
-        datetime.now()
-    ))
+        INSERT INTO posts (text, source, date)
+        VALUES (?, ?, ?)
+    ''', (text, source, datetime.now()))
     conn.commit()
     conn.close()
 
-def get_all_questions():
+def search_posts(keyword):
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute('SELECT questions FROM posts ORDER BY date DESC')
+    # Ищем текст, содержащий ключевое слово (регистронезависимо)
+    c.execute('''
+        SELECT text, source, date FROM posts
+        WHERE text LIKE ?
+        ORDER BY date DESC
+    ''', (f'%{keyword}%',))
     rows = c.fetchall()
     conn.close()
-    
-    all_q = []
-    for row in rows:
-        questions = json.loads(row[0])
-        all_q.extend(questions)
-    return all_q
+    return rows
+
+def get_all_posts():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('SELECT text, source, date FROM posts ORDER BY date DESC')
+    rows = c.fetchall()
+    conn.close()
+    return rows
 
 def get_stats():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute('SELECT COUNT(*) FROM posts')
-    posts_count = c.fetchone()[0]
-    
-    c.execute('SELECT questions FROM posts')
-    rows = c.fetchall()
+    count = c.fetchone()[0]
     conn.close()
-    
-    questions_count = 0
-    for row in rows:
-        questions = json.loads(row[0])
-        questions_count += len(questions)
-    
-    return {
-        "posts": posts_count,
-        "questions": questions_count
-    }
-
-# --- ЛОГИКА ВОПРОСОВ (упрощённая) ---
-def extract_questions(text):
-    """Вытаскивает вопросы из текста (только те, что с ?)"""
-    text = text or ""
-    hashtags = re.findall(r'#\w+', text)
-    
-    # Ищем предложения с вопросительным знаком
-    pattern = r'[^.!?]*\?'
-    matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
-    
-    questions = [m.strip() for m in matches if len(m.strip()) > 5]
-    
-    # Если вопросов нет — пробуем найти вопросительные слова
-    if not questions:
-        word_pattern = r'(Кто|Что|Где|Когда|Куда|Откуда|Почему|Зачем|Как|Сколько|Какие?|Чей)\s+[^.!?]+'
-        matches = re.findall(word_pattern, text, re.IGNORECASE | re.DOTALL)
-        questions = [m.strip() + '?' for m in matches if len(m.strip()) > 5]
-    
-    return list(dict.fromkeys(questions))[:10], hashtags
+    return count
 
 # --- ОБРАБОТЧИКИ БОТА ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Привет! Я бот для сбора вопросов.\n\n"
-        "📩 **Просто отправь мне текст** (скопируй из поста) — я вытащу вопросы и сохраню в базу.\n\n"
-        "📚 `/all` — показать все вопросы.\n"
-        "📊 `/stats` — статистика базы."
+        "👋 Привет! Я бот для хранения текстов.\n\n"
+        "📩 **Просто отправь мне текст** — я сохраню его в базу.\n\n"
+        "🔍 `/find <слово>` — найти все посты с этим словом.\n"
+        "📚 `/all` — показать все сохранённые посты.\n"
+        "📊 `/stats` — сколько всего постов в базе."
     )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or update.message.caption or ""
-    
     if not text:
-        await update.message.reply_text("❌ Отправь мне текст с вопросами.")
+        await update.message.reply_text("❌ Отправь мне текст для сохранения.")
         return
-    
-    await update.message.reply_text("🔄 Обрабатываю...")
-    
-    questions, hashtags = extract_questions(text)
-    save_to_db(text, questions, hashtags)
-    
-    if questions:
-        reply = f"✅ Найдено вопросов: {len(questions)}\n\n"
-        for i, q in enumerate(questions, 1):
-            reply += f"{i}. {q}\n"
-    else:
-        reply = "⚠️ В тексте не найдено вопросов. Но текст сохранён в базу."
-    
-    if hashtags:
-        reply += f"\n🏷️ Хэштеги: {', '.join(hashtags)}"
-    
+
+    # Сохраняем
+    save_post(text, source="от пользователя")
+    await update.message.reply_text("✅ Текст сохранён в базу!")
+
+async def find_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❌ Укажи слово для поиска. Пример: `/find Чебурашка`")
+        return
+
+    keyword = " ".join(context.args)
+    await update.message.reply_text(f"🔍 Ищу посты со словом: **{keyword}**...")
+
+    results = search_posts(keyword)
+    if not results:
+        await update.message.reply_text(f"📭 Ничего не найдено по запросу: {keyword}")
+        return
+
+    # Показываем первые 10 результатов (чтобы не заспамить)
+    reply = f"🔍 **Найдено постов: {len(results)}**\n\n"
+    for i, (text, source, date) in enumerate(results[:10], 1):
+        # Обрезаем текст до 100 символов для краткости
+        preview = text[:100] + "..." if len(text) > 100 else text
+        date_str = date.strftime("%d.%m.%Y %H:%M") if date else "неизвестно"
+        reply += f"{i}. {preview}\n   📅 {date_str}\n\n"
+
+    if len(results) > 10:
+        reply += f"... и ещё {len(results) - 10} постов. Для просмотра всех используй /all"
+
     await update.message.reply_text(reply)
 
 async def show_all(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    questions = get_all_questions()
-    
-    if not questions:
-        await update.message.reply_text("📭 В базе пока нет вопросов.")
+    posts = get_all_posts()
+    if not posts:
+        await update.message.reply_text("📭 В базе пока нет постов.")
         return
-    
-    reply = "📚 **Все вопросы из базы:**\n\n"
-    for i, q in enumerate(questions, 1):
-        reply += f"{i}. {q}\n"
-    
+
+    reply = "📚 **Все сохранённые посты:**\n\n"
+    for i, (text, source, date) in enumerate(posts[:20], 1):
+        preview = text[:100] + "..." if len(text) > 100 else text
+        date_str = date.strftime("%d.%m.%Y %H:%M") if date else "неизвестно"
+        reply += f"{i}. {preview}\n   📅 {date_str}\n\n"
+
+    if len(posts) > 20:
+        reply += f"\n... и ещё {len(posts) - 20} постов."
+
     await update.message.reply_text(reply)
 
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    stats = get_stats()
-    await update.message.reply_text(
-        f"📊 **Статистика базы:**\n\n"
-        f"📝 Постов в базе: {stats['posts']}\n"
-        f"❓ Вопросов всего: {stats['questions']}"
-    )
+    count = get_stats()
+    await update.message.reply_text(f"📊 **Всего постов в базе:** {count}")
 
 # --- ЗАПУСК ---
 def main():
     init_db()
-    
     app = Application.builder().token(BOT_TOKEN).build()
-    
+
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("find", find_command))
     app.add_handler(CommandHandler("all", show_all))
     app.add_handler(CommandHandler("stats", show_stats))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
-    print("🤖 Бот запущен!")
+
+    print("🤖 Бот запущен! Сохраняет тексты и ищет по ключевым словам.")
     app.run_polling()
 
 if __name__ == "__main__":
