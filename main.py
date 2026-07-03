@@ -559,4 +559,13 @@ def main():
     app.add_handler(CommandHandler("backup_quizzes", backup_quizzes_command))
     app.add_handler(CommandHandler("restore_quizzes", restore_quizzes_command))
     
-    app.add_handler(MessageHandler(filters.PHOTO,
+    app.add_handler(MessageHandler(filters.PHOTO, handle_image))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & filters.Regex(r'^#'), handle_custom_hashtag))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(CallbackQueryHandler(button_callback))
+    
+    print("🤖 Бот запущен!")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
