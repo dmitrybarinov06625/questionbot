@@ -12,6 +12,9 @@ DB_NAME = 'posts.db'
 QUIZZES_DB = 'quizzes.db'
 CHANNEL_ID = "@tryaslos"  # ЗАМЕНИ НА СВОЙ КАНАЛ
 
+# ССЫЛКА НА ПРЕДЛОЖКУ — ЗАМЕНИ НА СВОЮ!
+SUGGESTION_LINK = "https://t.me/trassa993?direct"  # <-- СЮДА ВСТАВЬ СВОЮ ССЫЛКУ
+
 HASHTAGS = [
     "#Новое_поколение",
     "#Игра_бога",
@@ -86,12 +89,6 @@ def get_random_quiz():
 
 # --- ПАРСИНГ ВИКТОРИНЫ ---
 def parse_quiz(text):
-    """
-    Парсит викторину в формате:
-    Как зовут персонажа (Глен; Ашра; Кацпер; Воланд*)
-    
-    * — правильный ответ
-    """
     text = text.strip()
     
     match = re.match(r'^(.+?)\s*\((.+)\)\s*$', text)
@@ -176,7 +173,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard.append([InlineKeyboardButton(hashtag, callback_data=f"hashtag_{hashtag}")])
             keyboard.append([InlineKeyboardButton("✏️ Свой хэштег", callback_data="hashtag_custom")])
             
-            # Показываем превью
             options_preview = "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(parsed['options'])])
             await update.message.reply_text(
                 f"📝 **Превью викторины:**\n\n"
@@ -243,8 +239,9 @@ async def handle_custom_hashtag(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ЕСЛИ БОТ НЕ ЖДЁТ КАРТИНКУ — ИГНОРИРУЕМ
     if context.user_data.get('step') != 'waiting_for_image':
-        await update.message.reply_text("ℹ️ Сначала создай викторину через /quiz")
+        # Просто игнорируем фото, если оно не нужно
         return
     
     if not update.message.photo:
@@ -276,7 +273,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 1. Картинка с подписью (гиперссылка)
         caption = (
             f"🎯 ВИКТОРИНА\n{hashtag}\n\n"
-            f'<a href="https://t.me/your_channel">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>'
+            f'<a href="{SUGGESTION_LINK}">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>'
         )
         
         await context.bot.send_photo(
@@ -294,47 +291,6 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
             type="quiz",
             correct_option_id=quiz_data['correct_option_id'],
             is_anonymous=True
-        )
-        
-        await update.message.reply_text("✅ Викторина опубликована в канале!")
-        context.user_data.clear()
-        
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка: {e}")
-    # Сохраняем в базу
-    save_quiz(
-        quiz_data['question'],
-        ", ".join(quiz_data['options']),
-        quiz_data['correct_answer'],
-        quiz_data['correct_option_id'],
-        hashtag
-    )
-    
-    photo = update.message.photo[-1]
-    file_id = photo.file_id
-    
-    await update.message.reply_text("📤 Публикую в канал...")
-    
-    try:
-        # 1. Отправляем картинку с подписью
-        caption = f"🎯 ВИКТОРИНА\n{hashtag}\n\nТрясЛо №993 | Скинуть что-нибудь в предложку"
-        
-        await context.bot.send_photo(
-            chat_id=CHANNEL_ID,
-            photo=file_id,
-            caption=caption
-        )
-        
-        # 2. Отправляем ОПРОС (Poll)
-        await context.bot.send_poll(
-            chat_id=CHANNEL_ID,
-            question=quiz_data['question'],
-            options=quiz_data['options'],
-            type="quiz",  # викторина (будет показан правильный ответ)
-            correct_option_id=quiz_data['correct_option_id'],  # индекс правильного ответа
-            is_anonymous=False,  # видно кто голосовал
-            explanation="Правильный ответ отмечен ✅ после голосования",
-            explanation_parse_mode="HTML"
         )
         
         await update.message.reply_text("✅ Викторина опубликована в канале!")
