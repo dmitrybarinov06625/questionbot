@@ -290,7 +290,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         caption = (
-            f"🎯 ВИКТОРИНА\n{hashtag}\n\n"
+            f"Викторина\n{hashtag}\n\n"
             f'<a href="{SUGGESTION_LINK}">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>'
         )
         
