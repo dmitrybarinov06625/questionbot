@@ -4,9 +4,13 @@ import random
 import re
 import threading
 import time
+import asyncio
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
+
+# --- ГЛОБАЛЬНАЯ ПЕРЕМЕННАЯ ДЛЯ ПРИЛОЖЕНИЯ ---
+app_instance = None
 
 # --- КОНФИГИ ---
 BOT_TOKEN = "8798378718:AAEmRvVmnWBKCDu_sHQY8bvVhclnMwUmnFM"
@@ -50,6 +54,17 @@ def init_quizzes_db():
             date TEXT
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS scheduled (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question TEXT,
+            options TEXT,
+            correct_option_id INTEGER,
+            hashtag TEXT,
+            file_id TEXT,
+            publish_time TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
     print("✅ Базы данных готовы")
@@ -61,6 +76,35 @@ def save_quiz(question, options, correct_answer, correct_option_id, hashtag=None
         INSERT INTO quizzes (question, options, correct_answer, correct_option_id, hashtag, date)
         VALUES (?, ?, ?, ?, ?, ?)
     ''', (question, options, correct_answer, correct_option_id, hashtag, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+def add_scheduled(question, options, correct_option_id, hashtag, file_id, publish_time):
+    conn = sqlite3.connect(QUIZZES_DB)
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO scheduled (question, options, correct_option_id, hashtag, file_id, publish_time)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (question, options, correct_option_id, hashtag, file_id, publish_time.isoformat()))
+    conn.commit()
+    conn.close()
+
+def get_due_quizzes():
+    conn = sqlite3.connect(QUIZZES_DB)
+    c = conn.cursor()
+    now = datetime.now().isoformat()
+    c.execute('''
+        SELECT id, question, options, correct_option_id, hashtag, file_id, publish_time
+        FROM scheduled WHERE publish_time <= ?
+    ''', (now,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def delete_scheduled(quiz_id):
+    conn = sqlite3.connect(QUIZZES_DB)
+    c = conn.cursor()
+    c.execute('DELETE FROM scheduled WHERE id = ?', (quiz_id,))
     conn.commit()
     conn.close()
 
@@ -186,45 +230,6 @@ def parse_datetime(text):
                     return dt
     
     return None
-
-# --- ФУНКЦИЯ ДЛЯ ТАЙМЕРА ---
-def delayed_publish(bot_token, chat_id, file_id, quiz_data, hashtag, publish_time):
-    """Ждёт и публикует викторину"""
-    try:
-        # Ждём до нужного времени
-        while datetime.now() < publish_time:
-            time.sleep(10)
-        
-        # Создаём отдельный экземпляр бота
-        bot = Bot(token=bot_token)
-        
-        caption = (
-            f"🎯 ВИКТОРИНА\n{hashtag}\n\n"
-            f'<a href="{SUGGESTION_LINK}">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>'
-        )
-        
-        # Отправляем фото
-        bot.send_photo(
-            chat_id=chat_id,
-            photo=file_id,
-            caption=caption,
-            parse_mode="HTML"
-        )
-        
-        # Отправляем опрос
-        bot.send_poll(
-            chat_id=chat_id,
-            question=quiz_data['question'],
-            options=quiz_data['options'],
-            type="quiz",
-            correct_option_id=quiz_data['correct_option_id'],
-            is_anonymous=True
-        )
-        
-        print(f"✅ Викторина опубликована: {quiz_data['question'][:30]}...")
-        
-    except Exception as e:
-        print(f"❌ Ошибка публикации: {e}")
 
 # --- ОБРАБОТЧИКИ ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -357,7 +362,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return
         
-        # Сохраняем в базу
+        # Сохраняем в основную базу
         save_quiz(
             quiz_data['question'],
             ", ".join(quiz_data['options']),
@@ -366,13 +371,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             hashtag
         )
         
-        # Создаём и запускаем поток с таймером
-        thread = threading.Thread(
-            target=delayed_publish,
-            args=[BOT_TOKEN, CHANNEL_ID, file_id, quiz_data, hashtag, publish_time]
+        # Сохраняем в расписание
+        add_scheduled(
+            quiz_data['question'],
+            ", ".join(quiz_data['options']),
+            quiz_data['correct_option_id'],
+            hashtag,
+            file_id,
+            publish_time
         )
-        thread.daemon = True
-        thread.start()
         
         delay = int((publish_time - datetime.now()).total_seconds())
         
@@ -460,10 +467,58 @@ async def all_quizzes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(reply)
 
+# --- ФУНКЦИЯ ПРОВЕРКИ РАСПИСАНИЯ (вызывается в фоновом потоке) ---
+def check_scheduled_background():
+    """Фоновая проверка расписания"""
+    while True:
+        try:
+            due = get_due_quizzes()
+            for row in due:
+                quiz_id, question, options, correct_option_id, hashtag, file_id, publish_time_str = row
+                options_list = options.split(", ") if options else []
+                
+                try:
+                    caption = (
+                        f"🎯 ВИКТОРИНА\n{hashtag}\n\n"
+                        f'<a href="{SUGGESTION_LINK}">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>'
+                    )
+                    
+                    # Используем глобальный bot
+                    bot = Bot(token=BOT_TOKEN)
+                    bot.send_photo(
+                        chat_id=CHANNEL_ID,
+                        photo=file_id,
+                        caption=caption,
+                        parse_mode="HTML"
+                    )
+                    bot.send_poll(
+                        chat_id=CHANNEL_ID,
+                        question=question,
+                        options=options_list,
+                        type="quiz",
+                        correct_option_id=correct_option_id,
+                        is_anonymous=True
+                    )
+                    
+                    delete_scheduled(quiz_id)
+                    print(f"✅ Викторина опубликована: {question[:30]}...")
+                    
+                except Exception as e:
+                    print(f"❌ Ошибка публикации: {e}")
+        except Exception as e:
+            print(f"❌ Ошибка проверки расписания: {e}")
+        
+        time.sleep(30)  # Проверяем каждые 30 секунд
+
 # --- ЗАПУСК ---
 def main():
     init_db()
     init_quizzes_db()
+    
+    # Запускаем фоновый поток для проверки расписания
+    scheduler_thread = threading.Thread(target=check_scheduled_background, daemon=True)
+    scheduler_thread.start()
+    print("🕐 Фоновый планировщик запущен (проверка каждые 30 секунд)")
     
     app = Application.builder().token(BOT_TOKEN).build()
     
