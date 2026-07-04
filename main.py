@@ -11,7 +11,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 
 # --- КОНФИГИ ---
-BOT_TOKEN = "8798378718:AAEmRvVmnWBKCDu_sHQY8bvVhclnMwUmnFM"
+BOT_TOKEN = "8798378718:AAF_lNoOwT1dbK8Lkm2k5slYkzl1mL0VfYM"
 CHANNEL_ID = "@trassa993"  # ЗАМЕНИ
 SUGGESTION_LINK = "https://t.me/trassa993?direct"  # ЗАМЕНИ
 QUIZZES_DB = 'quizzes.db'
