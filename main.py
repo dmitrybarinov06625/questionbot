@@ -419,13 +419,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/backup — бэкап основной базы\n"
         "/backupbase — бэкап базы вопросов"
     )
-            
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    data = query.data
     
+    data = query.data
+    print(f"🔘 Нажата кнопка: {data}")
+    
+    # --- ВЫБОР ХЭШТЕГА ---
     if data.startswith("hashtag_"):
         hashtag = data.replace("hashtag_", "")
         
@@ -440,10 +442,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"✅ Хэштег: {hashtag}\n\n"
             "🖼️ Отправь картинку для поста.\n\n"
-            "После картинки укажи время публикации (например, 20:33)"
+            "После картинки выбери действие."
         )
         return
     
+    # --- ЗАПЛАНИРОВАТЬ ---
+    if data == "schedule":
+        context.user_data['step'] = 'waiting_for_time'
+        await query.edit_message_text(
+            "📅 **Укажи время публикации** (МСК):\n"
+            "Например: `20:33` или `15.07 20:33`"
+        )
+        return
+    
+    # --- ПОДТВЕРЖДЕНИЕ ПУБЛИКАЦИИ (с таймером) ---
     if data == "confirm_publish":
         chat_id = str(update.effective_user.id)
         quiz_data = context.user_data.get('quiz_data')
@@ -456,7 +468,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return
         
-        # СОХРАНЯЕМ В БД
         save_scheduled(
             chat_id,
             quiz_data['question'],
@@ -473,19 +484,86 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"✅ Викторина запланирована на **{msk_time}** МСК!\n\n"
             f"⏳ Осталось: {delay} секунд\n\n"
-            "Викторина автоматически появится в канале в указанное время. 🚀\n\n"
             "📋 /my — посмотреть все твои викторины"
         )
         
         context.user_data.clear()
         return
     
-    if data == "cancel_publish":
-        await query.edit_message_text("❌ Публикация отменена.")
+    # --- МОМЕНТАЛЬНАЯ ПУБЛИКАЦИЯ ---
+    if data == "publish_now":
+        quiz_data = context.user_data.get('quiz_data')
+        hashtag = context.user_data.get('quiz_hashtag')
+        file_id = context.user_data.get('file_id')
+        
+        if not quiz_data or not hashtag or not file_id:
+            await query.edit_message_text("❌ Ошибка. Начни заново через /quiz")
+            context.user_data.clear()
+            return
+        
+        await query.edit_message_text("📤 Публикую викторину сейчас...")
+        
+        try:
+            caption = f"🎯 ВИКТОРИНА\n{hashtag}\n\n<a href=\"{SUGGESTION_LINK}\">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>"
+            
+            url_photo = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+            requests.post(url_photo, data={
+                "chat_id": CHANNEL_ID,
+                "photo": file_id,
+                "caption": caption,
+                "parse_mode": "HTML"
+            })
+            
+            url_poll = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPoll"
+            resp = requests.post(url_poll, json={
+                "chat_id": CHANNEL_ID,
+                "question": quiz_data['question'],
+                "options": quiz_data['options'],
+                "type": "quiz",
+                "correct_option_id": quiz_data['correct_option_id'],
+                "is_anonymous": True
+            })
+            
+            if resp.json().get('ok'):
+                conn = sqlite3.connect(QUIZZES_DB)
+                c = conn.cursor()
+                c.execute('''
+                    INSERT INTO quizzes (question, options, correct_option_id, hashtag, date)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (quiz_data['question'], '|||'.join(quiz_data['options']), quiz_data['correct_option_id'], hashtag, datetime.now().isoformat()))
+                conn.commit()
+                conn.close()
+                
+                await query.edit_message_text(
+                    f"✅ Викторина ОПУБЛИКОВАНА в канале!\n\n"
+                    f"❓ {quiz_data['question']}\n"
+                    f"🏷️ {hashtag}"
+                )
+            else:
+                await query.edit_message_text(f"❌ Ошибка: {resp.json()}")
+                
+        except Exception as e:
+            await query.edit_message_text(f"❌ Ошибка: {e}")
+        
         context.user_data.clear()
         return
+    
+    # --- ОТМЕНА ---
+    if data == "cancel_publish":
+        await query.edit_message_text("❌ Отменено.")
+        context.user_data.clear()
+        return
+    
+    await query.edit_message_text("❌ Неизвестная команда.")
+            
 
-async def handle_custom_hashtag(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+        
+    
+        
+        
+      
+    async def handle_custom_hashtag(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('step') != 'waiting_for_custom_hashtag':
         return
     
@@ -517,13 +595,20 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     quiz_data = context.user_data.get('quiz_data')
     hashtag = context.user_data.get('quiz_hashtag')
     
+    keyboard = [
+        [InlineKeyboardButton("✅ Опубликовать сейчас", callback_data="publish_now")],
+        [InlineKeyboardButton("⏰ Запланировать на время", callback_data="schedule")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_publish")]
+    ]
+    
     await update.message.reply_text(
         f"🖼️ Картинка сохранена!\n\n"
         f"❓ {quiz_data['question']}\n"
         f"🏷️ {hashtag}\n\n"
-        "📅 **Укажи время публикации** (МСК):\n"
-        "Например: `20:33` или `15.07 20:33`"
+        "Что делаем?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
+    
 
 def backup_quizzes():
     """Создаёт бэкап базы данных"""
