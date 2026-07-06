@@ -264,7 +264,7 @@ async def my_quizzes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for quiz_id, question, publish_time in scheduled:
         dt = datetime.fromisoformat(publish_time) + timedelta(hours=3)  # Показываем в МСК
         reply += f"• {question[:40]}... → {dt.strftime('%d.%m %H:%M')}\n"
-        reply += f"  /cancel_{quiz_id} — отменить эту\n"
+        reply += f"  /cancel {quiz_id} — отменить эту\n"
     
     await update.message.reply_text(reply)
 
