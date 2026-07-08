@@ -16,6 +16,8 @@ CHANNEL_ID = "@trassa993"
 SUGGESTION_LINK = "https://t.me/trassa993?direct"
 QUIZZES_DB = 'quizzes.db'
 BASE_QUIZZES_DB = 'basequizzes.db'
+# --- ID ПОЛЬЗОВАТЕЛЯ ДЛЯ НАПОМИНАНИЙ ---
+MEME_ADMIN_ID = "123456789"  # ЗАМЕНИ НА РЕАЛЬНЫЙ CHAT_ID
 
 HASHTAGS = [
     "#Новое_поколение", "#Игра_бога", "#Идеальный_мир", "#Голос_времени",
@@ -187,6 +189,39 @@ def delete_user_memes(chat_id, meme_id=None):
         c.execute('DELETE FROM memes WHERE chat_id = ?', (chat_id,))
     conn.commit()
     conn.close()
+
+def get_today_memes_by_time(chat_id, target_hour, target_minute):
+    """Проверяет, запланирован ли мем на конкретное время сегодня"""
+    conn = sqlite3.connect(QUIZZES_DB)
+    c = conn.cursor()
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999).isoformat()
+    # Время публикации сохраняется в UTC, поэтому добавляем поправку
+    target_utc = datetime.now().replace(hour=target_hour-3, minute=target_minute, second=0, microsecond=0).isoformat()
+    c.execute('''
+        SELECT id FROM memes 
+        WHERE chat_id = ? 
+        AND publish_time >= ? 
+        AND publish_time <= ?
+        AND publish_time LIKE ?
+    ''', (chat_id, today_start, today_end, f'%{target_hour-3:02d}:{target_minute:02d}%'))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def send_reminder(bot_token, chat_id, time_str):
+    """Отправляет напоминание пользователю"""
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        text = f"⚠️ **Напоминание!**\n\nТы ещё не запланировал мем на {time_str}!\n\n🖼️ Используй `/meme` чтобы создать и запланировать мем."
+        requests.post(url, data={
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "Markdown"
+        })
+        print(f"✅ Напоминание отправлено на {time_str}")
+    except Exception as e:
+        print(f"❌ Ошибка отправки напоминания: {e}")
 
 # --- ФОНОВЫЙ ПОТОК ---
 def scheduler_loop():
@@ -864,6 +899,33 @@ async def handle_meme_media_handler(update: Update, context: ContextTypes.DEFAUL
         return
     await handle_meme_media(update, context)
 
+# --- ОТДЕЛЬНЫЙ ПОТОК ДЛЯ НАПОМИНАНИЙ ---
+def reminder_loop():
+    """Отдельный поток для напоминаний о мемах"""
+    while True:
+        try:
+            now = datetime.now()
+            current_hour = now.hour
+            current_minute = now.minute
+            
+            # Время для напоминаний: 17:30, 18:30, 19:30
+            reminder_times = [
+                {"hour": 17, "minute": 30, "start_remind": 17, "start_minute": 5},
+                {"hour": 18, "minute": 30, "start_remind": 18, "start_minute": 5},
+                {"hour": 19, "minute": 30, "start_remind": 19, "start_minute": 5}
+            ]
+            
+            for rt in reminder_times:
+                if current_hour == rt["start_remind"] and rt["start_minute"] <= current_minute <= rt["start_minute"] + 20:
+                    existing = get_today_memes_by_time(MEME_ADMIN_ID, rt["hour"], rt["minute"])
+                    if not existing and current_minute % 5 == 0:
+                        send_reminder(BOT_TOKEN, MEME_ADMIN_ID, f"{rt['hour']:02d}:{rt['minute']:02d}")
+            
+        except Exception as e:
+            print(f"❌ Ошибка в напоминалке: {e}")
+        
+        time.sleep(60)
+
 # --- ЗАПУСК ---
 def main():
     init_db()
@@ -872,6 +934,10 @@ def main():
     scheduler_thread = threading.Thread(target=scheduler_loop, daemon=True)
     scheduler_thread.start()
     print("🔄 Планировщик запущен")
+
+    reminder_thread = threading.Thread(target=reminder_loop, daemon=True)
+    reminder_thread.start()
+    print("⏰ Напоминалка запущена")
     
     app = Application.builder().token(BOT_TOKEN).build()
     
