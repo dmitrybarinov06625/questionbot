@@ -17,7 +17,7 @@ SUGGESTION_LINK = "https://t.me/trassa993?direct"
 QUIZZES_DB = 'quizzes.db'
 BASE_QUIZZES_DB = 'basequizzes.db'
 # --- ID ПОЛЬЗОВАТЕЛЯ ДЛЯ НАПОМИНАНИЙ ---
-MEME_ADMIN_ID = "6607609864"  # ЗАМЕНИ НА РЕАЛЬНЫЙ CHAT_ID
+MEME_ADMIN_ID = "5206039766"  # ЗАМЕНИ НА РЕАЛЬНЫЙ CHAT_ID
 
 HASHTAGS = [
     "#Новое_поколение", "#Игра_бога", "#Идеальный_мир", "#Голос_времени",
@@ -230,15 +230,17 @@ def send_reminder(bot_token, chat_id, time_str):
         print(f"✅ Напоминание отправлено на {time_str}")
     except Exception as e:
         print(f"❌ Ошибка отправки напоминания: {e}")
-
 # --- ОТДЕЛЬНЫЙ ПОТОК ДЛЯ НАПОМИНАНИЙ ---
 def reminder_loop():
     """Отдельный поток для напоминаний о мемах"""
+    last_reminder = {}  # Храним время последнего напоминания для каждого слота
+    
     while True:
         try:
             now = datetime.now()
             current_hour = now.hour
             current_minute = now.minute
+            today_str = now.strftime('%Y-%m-%d')
             
             # Время для напоминаний: 17:30, 18:30, 19:30 (МСК)
             reminder_times = [
@@ -248,13 +250,29 @@ def reminder_loop():
             ]
             
             for rt in reminder_times:
-                # Проверяем, что сейчас время для напоминания (с 17:05 до 17:25)
+                # ПРОВЕРЯЕМ: сейчас час для напоминания (например, 17:05-17:25)
                 if current_hour == rt["start_remind"] and rt["start_minute"] <= current_minute <= rt["start_minute"] + 20:
+                    
                     # Проверяем, есть ли уже мем на это время сегодня
                     existing = get_today_memes_by_time(MEME_ADMIN_ID, rt["hour"], rt["minute"])
-                    if not existing and current_minute % 5 == 0:
-                        send_reminder(BOT_TOKEN, MEME_ADMIN_ID, f"{rt['hour']:02d}:{rt['minute']:02d}")
+                    
+                    if not existing:
+                        # Ключ для этого слота (чтобы не дублировать)
+                        reminder_key = f"{today_str}_{rt['hour']}_{rt['minute']}"
+                        
+                        # Отправляем ТОЛЬКО если сегодня ещё не отправляли для этого слота
+                        if reminder_key not in last_reminder:
+                            # И только в 05, 10, 15, 20, 25 минуты
+                            if current_minute % 5 == 0:
+                                send_reminder(BOT_TOKEN, MEME_ADMIN_ID, f"{rt['hour']:02d}:{rt['minute']:02d}")
+                                last_reminder[reminder_key] = True
+                                print(f"⏰ Напоминание отправлено на {rt['hour']:02d}:{rt['minute']:02d}")
             
+            # Очищаем старые записи (для нового дня)
+            for key in list(last_reminder.keys()):
+                if not key.startswith(today_str):
+                    del last_reminder[key]
+                    
         except Exception as e:
             print(f"❌ Ошибка в напоминалке: {e}")
         
