@@ -17,7 +17,7 @@ SUGGESTION_LINK = "https://t.me/trassa993?direct"
 QUIZZES_DB = 'quizzes.db'
 BASE_QUIZZES_DB = 'basequizzes.db'
 # --- ID ПОЛЬЗОВАТЕЛЯ ДЛЯ НАПОМИНАНИЙ ---
-MEME_ADMIN_ID = "123456789"  # ЗАМЕНИ НА РЕАЛЬНЫЙ CHAT_ID
+MEME_ADMIN_ID = "6607609864"  # ЗАМЕНИ НА РЕАЛЬНЫЙ CHAT_ID
 
 HASHTAGS = [
     "#Новое_поколение", "#Игра_бога", "#Идеальный_мир", "#Голос_времени",
