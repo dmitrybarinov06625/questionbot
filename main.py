@@ -221,7 +221,7 @@ def send_reminder(bot_token, chat_id, time_str):
     """Отправляет напоминание пользователю"""
     try:
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        text = f"⚠️ **Напоминание!**\n\nТы ещё не запланировал мем на {time_str} МСК!\n\n🖼️ Используй `/meme` чтобы создать и запланировать мем."
+        text = f"⚠️ **Напоминание!**\n\nТы ещё не запланировал мем!\n\n🖼️ Используй `/meme` чтобы создать и запланировать мем."
         requests.post(url, data={
             "chat_id": chat_id,
             "text": text,
@@ -244,8 +244,8 @@ def reminder_loop():
             
             # Время для напоминаний: 17:30, 18:30, 19:30 (МСК)
             reminder_times = [
-                {"hour": 14, "minute": 00, "start_remind": 8, "start_minute": 40},
-                {"hour": 15, "minute": 00, "start_remind": 9, "start_minute": 5},
+                {"hour": 9, "minute": 00, "start_remind": 8, "start_minute": 45},
+                {"hour": 10, "minute": 00, "start_remind": 9, "start_minute": 5},
                 {"hour": 15, "minute": 30, "start_remind": 15, "start_minute": 5},
                 {"hour": 16, "minute": 30, "start_remind": 16, "start_minute": 5}
             ]
