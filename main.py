@@ -809,11 +809,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Отправь текст")
         return
     
-    # --- СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ ---
-    # chat_id = str(update.effective_user.id)
-    # username = update.effective_user.username or "без_юзернейма"
-    # save_user(chat_id, username)
-    
     step = context.user_data.get('step')
     
     # --- БАЗОВЫЙ ВОПРОС ---
@@ -826,28 +821,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Неправильный формат.\nНужно: `Вопрос (А; Б*; В; Г)`")
         context.user_data['step'] = None
         return
-        
+    
     # --- ТЕКСТ ДЛЯ МЕМА ---
     if step == 'waiting_for_meme_post_text':
         context.user_data['meme_post_text'] = text
         context.user_data['step'] = 'waiting_for_meme_hashtag'
-    
+        
         keyboard = [
-        [InlineKeyboardButton("✅ Добавить #ФлудНаПМ", callback_data="meme_hashtag_add")],
-        [InlineKeyboardButton("⏭️ Пропустить", callback_data="meme_hashtag_skip")]
-    ]
-    
+            [InlineKeyboardButton("✅ Добавить #ФлудНаПМ", callback_data="meme_hashtag_add")],
+            [InlineKeyboardButton("⏭️ Пропустить", callback_data="meme_hashtag_skip")]
+        ]
+        
         await update.message.reply_text(
             f"✅ Текст сохранён:\n\n{text}\n\n"
             "📝 Добавить хэштег #ФлудНаПМ?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
+    
     # --- ВРЕМЯ ДЛЯ МЕМА ---
     if step == 'waiting_for_meme_time':
         await handle_meme_time(update, context)
         return
-    
     
     # --- ТЕКСТ ВИКТОРИНЫ ---
     if step == 'waiting_for_quiz_text':
@@ -898,8 +893,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📅 **Публикация:** {msk_time} МСК\n"
             f"⏳ **Осталось:** {delay} сек\n\n"
             f"❓ {context.user_data['quiz_data']['question']}\n"
-            f"🏷️ {context.user_data['quiz_hashtag']}\n"
-            f"📝 {context.user_data.get('post_text', 'Без текста')}\n\n"
+            f"🏷️ {context.user_data['quiz_hashtag']}\n\n"
             "✅ Подтверждаешь?",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
@@ -911,17 +905,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not text.startswith('#'):
             text = '#' + text
         context.user_data['quiz_hashtag'] = text
-        context.user_data['step'] = 'waiting_for_post_text'
-        
-        keyboard = [
-            [InlineKeyboardButton("✅ Добавить текст", callback_data="add_text_yes")],
-            [InlineKeyboardButton("⏭️ Без текста", callback_data="add_text_no")]
-        ]
+        context.user_data['step'] = 'waiting_for_image'
         
         await update.message.reply_text(
             f"✅ Хэштег: {text}\n\n"
-            "📝 Добавить текст к посту?",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "🖼️ Отправь картинку для поста.\n\n"
+            "После картинки выбери действие."
         )
         return
     
@@ -938,7 +927,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/id — мой ID\n"
         "/view @username — викторины пользователя"
     )
-
 # --- КНОПКИ ---
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
