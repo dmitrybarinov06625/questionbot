@@ -957,8 +957,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🏷️ {hashtag}\n"
         "📋 /my — посмотреть все"
     )
-       context.user_data.clear()
-       return
+        context.user_data.clear()
+        return
     
     # --- МОМЕНТАЛЬНАЯ ПУБЛИКАЦИЯ ---
     # --- МОМЕНТАЛЬНАЯ ПУБЛИКАЦИЯ (для викторин) ---
