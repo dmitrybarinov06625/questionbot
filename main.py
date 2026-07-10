@@ -787,14 +787,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_meme_time(update, context)
         return
     
-    # --- ТЕКСТ ДЛЯ ПОСТА ---
-    if step == 'waiting_for_post_text':
-        context.user_data['post_text'] = text
-        context.user_data['step'] = 'waiting_for_image'
-        await update.message.reply_text(
-            f"✅ Текст сохранён:\n\n{text}\n\n🖼️ Теперь отправь картинку."
-        )
-        return
     
     # --- ТЕКСТ ВИКТОРИНЫ ---
     if step == 'waiting_for_quiz_text':
@@ -904,46 +896,25 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # --- ВЫБОР ХЭШТЕГА (ДЛЯ ВИКТОРИНЫ) ---
-    if data.startswith("hashtag_"):
-        hashtag = data.replace("hashtag_", "")
-        
-        if hashtag == "custom":
-            await query.edit_message_text("✏️ Напиши свой хэштег (например, #МойХэштег)")
-            context.user_data['step'] = 'waiting_for_custom_hashtag'
-            return
-        
-        context.user_data['quiz_hashtag'] = hashtag
-        context.user_data['step'] = 'waiting_for_post_text'
-        
-        keyboard = [
-            [InlineKeyboardButton("✅ Добавить текст", callback_data="add_text_yes")],
-            [InlineKeyboardButton("⏭️ Без текста", callback_data="add_text_no")]
-        ]
-        
-        await query.edit_message_text(
-            f"✅ Хэштег: {hashtag}\n\n"
-            "📝 Добавить текст к посту?",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    # --- ВЫБОР ХЭШТЕГА (ДЛЯ ВИКТОРИНЫ) ---
+if data.startswith("hashtag_"):
+    hashtag = data.replace("hashtag_", "")
+    
+    if hashtag == "custom":
+        await query.edit_message_text("✏️ Напиши свой хэштег (например, #МойХэштег)")
+        context.user_data['step'] = 'waiting_for_custom_hashtag'
         return
     
-    # --- ДОБАВИТЬ ТЕКСТ К ПОСТУ ---
-    if data == "add_text_yes":
-        context.user_data['step'] = 'waiting_for_post_text'
-        await query.edit_message_text(
-            "📝 Напиши текст, который добавится к посту.\n\n"
-            "(Это будет подпись к картинке)"
-        )
-        return
+    context.user_data['quiz_hashtag'] = hashtag
+    context.user_data['step'] = 'waiting_for_image'  # <-- СРАЗУ НА КАРТИНКУ
     
-    if data == "add_text_no":
-        context.user_data['post_text'] = None
-        context.user_data['step'] = 'waiting_for_image'
-        await query.edit_message_text(
-            "⏭️ Без текста.\n\n"
-            "🖼️ Отправь картинку для поста."
-        )
-        return
+    await query.edit_message_text(
+        f"✅ Хэштег: {hashtag}\n\n"
+        "🖼️ Отправь картинку для поста.\n\n"
+        "После картинки выбери действие."
+    )
+    return
+  
     
     # --- ЗАПЛАНИРОВАТЬ ---
     if data == "schedule":
@@ -952,100 +923,104 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # --- ПОДТВЕРЖДЕНИЕ ПУБЛИКАЦИИ ---
-    if data == "confirm_publish":
-        chat_id = str(update.effective_user.id)
-        username = update.effective_user.username or "без_юзернейма"
-        quiz_data = context.user_data.get('quiz_data')
-        hashtag = context.user_data.get('quiz_hashtag')
-        file_id = context.user_data.get('file_id')
-        publish_time = context.user_data.get('publish_time')
-        post_text = context.user_data.get('post_text')
-        caption = context.user_data.get('caption')
-        
-        if not quiz_data or not hashtag or not file_id or not publish_time:
-            await query.edit_message_text("❌ Ошибка. Начни заново через /quiz")
-            context.user_data.clear()
-            return
-        
-        save_scheduled(chat_id, username, quiz_data['question'], '|||'.join(quiz_data['options']), quiz_data['correct_option_id'], hashtag, file_id, publish_time)
-        msk_time = (publish_time + timedelta(hours=3)).strftime('%d.%m.%Y в %H:%M')
-        delay = int((publish_time - datetime.now()).total_seconds())
-        
-        await query.edit_message_text(
-            f"✅ Викторина запланирована на **{msk_time}** МСК!\n"
-            f"⏳ Осталось: {delay} сек\n"
-            f"🏷️ {hashtag}\n"
-            f"📝 {post_text if post_text else 'Без текста'}\n"
-            "📋 /my — посмотреть все"
-        )
+    # --- ПОДТВЕРЖДЕНИЕ ПУБЛИКАЦИИ ---
+if data == "confirm_publish":
+    chat_id = str(update.effective_user.id)
+    username = update.effective_user.username or "без_юзернейма"
+    quiz_data = context.user_data.get('quiz_data')
+    hashtag = context.user_data.get('quiz_hashtag')
+    file_id = context.user_data.get('file_id')
+    publish_time = context.user_data.get('publish_time')
+    
+    if not quiz_data or not hashtag or not file_id or not publish_time:
+        await query.edit_message_text("❌ Ошибка. Начни заново через /quiz")
         context.user_data.clear()
         return
     
+    save_scheduled(
+        chat_id,
+        username,
+        quiz_data['question'],
+        '|||'.join(quiz_data['options']),
+        quiz_data['correct_option_id'],
+        hashtag,
+        file_id,
+        publish_time
+    )
+    
+    msk_time = (publish_time + timedelta(hours=3)).strftime('%d.%m.%Y в %H:%M')
+    delay = int((publish_time - datetime.now()).total_seconds())
+    
+    await query.edit_message_text(
+        f"✅ Викторина запланирована на **{msk_time}** МСК!\n"
+        f"⏳ Осталось: {delay} сек\n"
+        f"🏷️ {hashtag}\n"
+        "📋 /my — посмотреть все"
+    )
+    context.user_data.clear()
+    return
+    
     # --- МОМЕНТАЛЬНАЯ ПУБЛИКАЦИЯ ---
-    if data == "publish_now":
-        quiz_data = context.user_data.get('quiz_data')
-        hashtag = context.user_data.get('quiz_hashtag')
-        file_id = context.user_data.get('file_id')
-        post_text = context.user_data.get('post_text')
-        
-        if not quiz_data or not hashtag or not file_id:
-            await query.edit_message_text("❌ Ошибка. Начни заново через /quiz")
-            context.user_data.clear()
-            return
-        
-        await query.edit_message_text("📤 Публикую викторину сейчас...")
-        
-        try:
-            # Формируем подпись
-            caption = f"Викторина\n{hashtag}"
-            if post_text:
-                caption += f"\n\n{post_text}"
-            caption += f"\n\n<a href=\"{SUGGESTION_LINK}\">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>"
-            
-            # Отправляем фото
-            url_photo = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
-            requests.post(url_photo, data={
-                "chat_id": CHANNEL_ID,
-                "photo": file_id,
-                "caption": caption,
-                "parse_mode": "HTML"
-            })
-            
-            # Отправляем опрос
-            url_poll = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPoll"
-            resp = requests.post(url_poll, json={
-                "chat_id": CHANNEL_ID,
-                "question": quiz_data['question'],
-                "options": quiz_data['options'],
-                "type": "quiz",
-                "correct_option_id": quiz_data['correct_option_id'],
-                "is_anonymous": True
-            })
-            
-            if resp.json().get('ok'):
-                conn = sqlite3.connect(QUIZZES_DB)
-                c = conn.cursor()
-                c.execute('''
-                    INSERT INTO quizzes (question, options, correct_option_id, hashtag, date)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (quiz_data['question'], '|||'.join(quiz_data['options']), quiz_data['correct_option_id'], hashtag, datetime.now().isoformat()))
-                conn.commit()
-                conn.close()
-                
-                await query.edit_message_text(
-                    f"✅ Викторина ОПУБЛИКОВАНА!\n\n"
-                    f"❓ {quiz_data['question']}\n"
-                    f"🏷️ {hashtag}\n"
-                    f"📝 {post_text if post_text else 'Без текста'}"
-                )
-            else:
-                await query.edit_message_text(f"❌ Ошибка: {resp.json()}")
-                
-        except Exception as e:
-            await query.edit_message_text(f"❌ Ошибка: {e}")
-        
+    # --- МОМЕНТАЛЬНАЯ ПУБЛИКАЦИЯ (для викторин) ---
+if data == "publish_now":
+    quiz_data = context.user_data.get('quiz_data')
+    hashtag = context.user_data.get('quiz_hashtag')
+    file_id = context.user_data.get('file_id')
+    
+    if not quiz_data or not hashtag or not file_id:
+        await query.edit_message_text("❌ Ошибка. Начни заново через /quiz")
         context.user_data.clear()
         return
+    
+    await query.edit_message_text("📤 Публикую викторину сейчас...")
+    
+    try:
+        # Подпись БЕЗ текста
+        caption = f"Викторина\n{hashtag}\n\n<a href=\"{SUGGESTION_LINK}\">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>"
+        
+        # Отправляем фото
+        url_photo = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+        requests.post(url_photo, data={
+            "chat_id": CHANNEL_ID,
+            "photo": file_id,
+            "caption": caption,
+            "parse_mode": "HTML"
+        })
+        
+        # Отправляем опрос
+        url_poll = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPoll"
+        resp = requests.post(url_poll, json={
+            "chat_id": CHANNEL_ID,
+            "question": quiz_data['question'],
+            "options": quiz_data['options'],
+            "type": "quiz",
+            "correct_option_id": quiz_data['correct_option_id'],
+            "is_anonymous": True
+        })
+        
+        if resp.json().get('ok'):
+            conn = sqlite3.connect(QUIZZES_DB)
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO quizzes (question, options, correct_option_id, hashtag, date)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (quiz_data['question'], '|||'.join(quiz_data['options']), quiz_data['correct_option_id'], hashtag, datetime.now().isoformat()))
+            conn.commit()
+            conn.close()
+            
+            await query.edit_message_text(
+                f"✅ Викторина ОПУБЛИКОВАНА!\n\n"
+                f"❓ {quiz_data['question']}\n"
+                f"🏷️ {hashtag}"
+            )
+        else:
+            await query.edit_message_text(f"❌ Ошибка: {resp.json()}")
+            
+    except Exception as e:
+        await query.edit_message_text(f"❌ Ошибка: {e}")
+    
+    context.user_data.clear()
+    return
     
     # --- ОТМЕНА ---
     if data == "cancel_publish":
@@ -1062,34 +1037,28 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.photo:
         await update.message.reply_text("❌ Отправь именно картинку")
         return
-
+    
     photo = update.message.photo[-1]
     context.user_data['file_id'] = photo.file_id
-
+    
     # Получаем данные
     hashtag = context.user_data.get('quiz_hashtag')
-    post_text = context.user_data.get('post_text')
     quiz_data = context.user_data.get('quiz_data')
-
-    # Формируем подпись с поддержкой текста
-    caption = f"Викторина\n{hashtag}"
-    if post_text:
-        caption += f"\n\n{post_text}"
-    caption += f"\n\n<a href=\"{SUGGESTION_LINK}\">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>"
-
+    
+    # Формируем подпись БЕЗ текста
+    caption = f"Викторина\n{hashtag}\n\n<a href=\"{SUGGESTION_LINK}\">ТрясЛо №993 | Скинуть что-нибудь в предложку</a>"
     context.user_data['caption'] = caption
-
+    
     keyboard = [
         [InlineKeyboardButton("✅ Опубликовать сейчас", callback_data="publish_now")],
         [InlineKeyboardButton("⏰ Запланировать на время", callback_data="schedule")],
         [InlineKeyboardButton("❌ Отмена", callback_data="cancel_publish")]
     ]
-
+    
     await update.message.reply_text(
         f"🖼️ Картинка сохранена!\n\n"
         f"❓ {quiz_data['question'] if quiz_data else '?'}\n"
-        f"🏷️ {hashtag}\n"
-        f"📝 {post_text if post_text else 'Без текста'}\n\n"
+        f"🏷️ {hashtag}\n\n"
         "Что делаем?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
