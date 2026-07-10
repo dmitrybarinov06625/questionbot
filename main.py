@@ -266,7 +266,6 @@ def reminder_loop():
                             # И только в 05, 10, 15, 20, 25 минуты
                             if current_minute % 5 == 0:
                                 send_reminder(BOT_TOKEN, MEME_ADMIN_ID, f"{rt['hour']:02d}:{rt['minute']:02d}")
-                                last_reminder[reminder_key] = True
                                 print(f"⏰ Напоминание отправлено на {rt['hour']:02d}:{rt['minute']:02d}")
             
             # Очищаем старые записи (для нового дня)
