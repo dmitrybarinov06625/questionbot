@@ -930,8 +930,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
             "📝 Напиши текст для мема.\n\n"
             "Он будет подписью к картинке/видео."
-        )
-        return
+            )
+            return
 
     if data == "meme_text_no":
         context.user_data['meme_post_text'] = None
