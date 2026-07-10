@@ -765,9 +765,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     # --- СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ ---
-    chat_id = str(update.effective_user.id)
-    username = update.effective_user.username or "без_юзернейма"
-    save_user(chat_id, username)
+    # chat_id = str(update.effective_user.id)
+    # username = update.effective_user.username or "без_юзернейма"
+    # save_user(chat_id, username)
     
     step = context.user_data.get('step')
     
