@@ -249,7 +249,7 @@ def reminder_loop():
             # --- НАПОМИНАЛКИ (ПО ТВОЕМУ ВРЕМЕНИ UTC+2) ---
             reminder_times = [
                 {"hour": 19, "minute": 50, "start_remind": 20, "start_minute": 35},  # 17:30 по твоему времени
-                {"hour": 20, "minute": 00, "start_remind": 21, "start_minute": 5},  # 18:30 по твоему времени
+                {"hour": 20, "minute": 30, "start_remind": 21, "start_minute": 10},  # 18:30 по твоему времени
                 {"hour": 21, "minute": 30, "start_remind": 22, "start_minute": 5},  # 19:30 по твоему времени
             ]
             
