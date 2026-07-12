@@ -1182,17 +1182,18 @@ async def show_memes(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(reply)
 
-async def test_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Принудительно проверяет, есть ли мем на указанное время"""
-    await update.message.reply_text("🔍 Проверяю мемы на 14:40 UTC (17:40 МСК)...")
+async def testrem(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Проверяет, видит ли бот мемы на 15:30 UTC"""
+    hour = 15
+    minute = 30
+    await update.message.reply_text(f"🔍 Проверяю мемы на {hour:02d}:{minute:02d} UTC...")
     
-    existing = get_today_memes_by_time(MEME_ADMIN_ID, 14, 40)
+    existing = get_today_memes_by_time(MEME_ADMIN_ID, hour, minute)
     
     if existing:
-        await update.message.reply_text(f"✅ НАЙДЕНО {len(existing)} МЕМОВ!")
+        await update.message.reply_text(f"✅ НАЙДЕНО {len(existing)} МЕМОВ! Напоминалка НЕ должна прийти.")
     else:
-        await update.message.reply_text("❌ МЕМОВ НЕ НАЙДЕНО")
-
+        await update.message.reply_text("❌ МЕМОВ НЕ НАЙДЕНО. Напоминалка ПРИДЁТ.")
 # --- ЗАПУСК ---
 def main():
     init_db()
