@@ -714,7 +714,7 @@ async def handle_meme_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post_text = context.user_data.get('meme_post_text')
     save_meme(chat_id, username, file_id, file_type, hashtag, post_text, dt)
     print(f"✅ МЕМ СОХРАНЁН В БД: {dt.isoformat()}, chat_id: {chat_id}")
-    msk_time = (dt + timedelta(hours=2)).strftime('%d.%m.%Y в %H:%M')
+    msk_time = (dt + timedelta(hours=3)).strftime('%d.%m.%Y в %H:%M')
     delay = int((dt - now).total_seconds())
     await update.message.reply_text(
         f"✅ Мем запланирован на **{msk_time}** МСК!\n"
