@@ -255,6 +255,7 @@ def reminder_loop():
             
             for rt in reminder_times:
                 # Проверяем, что сейчас время для напоминания (по твоему времени)
+                print(f"🔍 Проверка условия: {current_hour} == {rt['start_remind']} and {rt['start_minute']} <= {current_minute} <= {rt['start_minute'] + 20}")
                 if current_hour == rt["start_remind"] and rt["start_minute"] <= current_minute <= rt["start_minute"] + 20:
                     
                     # --- ПЕРЕВОДИМ ТВОЁ ВРЕМЯ В UTC (ДЛЯ ПОИСКА В БД) ---
@@ -264,7 +265,7 @@ def reminder_loop():
                     
                     # Проверяем, есть ли уже мем на это время сегодня
                     existing = get_today_memes_by_time(MEME_ADMIN_ID, utc_hour, utc_minute)
-                    
+                    print(f"📊 Найдено мемов в БД: {len(existing)}")
                     if not existing:
                         if current_minute % 5 == 0:
                             send_reminder(
