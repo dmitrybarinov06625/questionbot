@@ -208,9 +208,9 @@ def get_today_memes_by_time(chat_id, target_hour, target_minute):
 
     
     # Целевое время в UTC (МСК - 3 часа)
-    target_utc_hour = target_hour - 2
-    if target_utc_hour < 0:
-        target_utc_hour += 24
+    # target_utc_hour = target_hour - 2
+    # if target_utc_hour < 0:
+        # target_utc_hour += 24
     
     c.execute('''
         SELECT id FROM memes 
@@ -254,7 +254,7 @@ def reminder_loop():
             
             # --- НАПОМИНАЛКИ (ПО ТВОЕМУ ВРЕМЕНИ UTC+2) ---
             reminder_times = [
-                {"hour": 20, "minute": 00, "start_remind": 14, "start_minute": 45},  # 17:30 по твоему времени
+                {"hour": 18, "minute": 30, "start_remind": 18, "start_minute": 10},  # 17:30 по твоему времени
                 {"hour": 23, "minute": 30, "start_remind": 23, "start_minute": 15},  # 18:30 по твоему времени
                 # 19:30 по твоему времени
             ]
