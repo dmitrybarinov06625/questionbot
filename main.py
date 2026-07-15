@@ -827,24 +827,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # --- СВОЙ ХЭШТЕГ ДЛЯ МЕМА ---
-if step == 'waiting_for_meme_custom_hashtag':
-    text = text.strip()
-    if not text.startswith('#'):
-        text = '#' + text
-    context.user_data['meme_hashtag'] = text
-    context.user_data['step'] = 'waiting_for_meme_text'
+    if step == 'waiting_for_meme_custom_hashtag':
+        text = text.strip()
+        if not text.startswith('#'):
+            text = '#' + text
+        context.user_data['meme_hashtag'] = text
+        context.user_data['step'] = 'waiting_for_meme_text'
     
-    keyboard = [
-        [InlineKeyboardButton("✅ Добавить текст", callback_data="meme_text_yes")],
-        [InlineKeyboardButton("⏭️ Без текста", callback_data="meme_text_no")]
-    ]
+        keyboard = [
+            [InlineKeyboardButton("✅ Добавить текст", callback_data="meme_text_yes")],
+            [InlineKeyboardButton("⏭️ Без текста", callback_data="meme_text_no")]
+        ]
     
-    await update.message.reply_text(
-        f"✅ Хэштег: {text}\n\n📝 Добавить текст к мему?",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return
-    
+        await update.message.reply_text(
+            f"✅ Хэштег: {text}\n\n📝 Добавить текст к мему?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+      
     # --- ТЕКСТ ВИКТОРИНЫ ---
     if step == 'waiting_for_quiz_text':
         parsed = parse_quiz(text)
