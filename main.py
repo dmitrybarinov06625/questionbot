@@ -961,7 +961,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # --- ВЫБОР ХЭШТЕГА ДЛЯ МЕМА ---
-   if data.startswith("meme_h_"):
+    if data.startswith("meme_h_"):
        hashtag = data.replace("meme_h_", "")
     
        if hashtag == "custom":
